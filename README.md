@@ -7,6 +7,9 @@ pip install pydruid
 ```
 Documentation: https://pythonhosted.org/pydruid/. 
 
+#about this fork
+This fork enables asynchronous mode of operation for the Druid client. To achieve that it utilizes an asynchronous HTTP client. The asynchronous client is suitable for use with asynchronous frameworks such as Tornado. 
+
 #examples
 The following exampes show how to execute and analyze the results of three types of queries: timeseries, topN, and groupby. We will use these queries to ask simple questions about twitter's public data set.
 
