@@ -13,7 +13,7 @@ except ImportError:
     pass
 
 
-class Query:
+class Query(object):
     def __init__(self, query_dict, query_type):
         self.query_dict = query_dict
         self.query_type = query_type
@@ -143,7 +143,7 @@ class Query:
             return df
 
 
-class QueryBuilder:
+class QueryBuilder(object):
     def __init__(self):
         pass
 

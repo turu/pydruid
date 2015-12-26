@@ -25,7 +25,7 @@ from six.moves import urllib
 from pydruid.query import QueryBuilder
 
 
-class PyDruid:
+class PyDruid(object):
     """
     PyDruid contains the functions for creating and executing Druid queries, as well as
     for exporting query results into TSV files or pandas.DataFrame objects for subsequent analysis.
