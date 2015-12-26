@@ -3,6 +3,8 @@
 import os
 import pytest
 
+from pydruid.query import QueryBuilder, Query
+
 try:
     import pandas
     from pandas.util.testing import assert_frame_equal
@@ -10,25 +12,19 @@ except ImportError:
     pandas = None
 
 from six import PY3
-from pydruid.client import PyDruid
 from pydruid.utils import aggregators
 from pydruid.utils import postaggregator
 from pydruid.utils import filters
 from pydruid.utils import having
 
 
-def create_client():
-    return PyDruid('http://localhost:8083', 'druid/v2/')
-
-
-def create_client_with_results():
-    client = create_client()
-    client.query_type = 'timeseries'
-    client.result = [
+def create_query_with_results():
+    query = Query({}, 'timeseries')
+    query.result = [
         {'result': {'value1': 1, 'value2': '㬓'}, 'timestamp': '2015-01-01T00:00:00.000-05:00'},
         {'result': {'value1': 2, 'value2': '㬓'}, 'timestamp': '2015-01-02T00:00:00.000-05:00'}
     ]
-    return client
+    return query
 
 
 def line_ending():
@@ -37,29 +33,9 @@ def line_ending():
     return "\r\n"
 
 
-class TestClient:
-
+class TestQueryBuilder:
     def test_build_query(self):
-        client = create_client()
-        assert client.query_dict is None
-
-        client.build_query({
-            'datasource': 'things',
-            'aggregations': {
-                'count': aggregators.count('thing'),
-            },
-            'post_aggregations': {
-                'avg': (postaggregator.Field('sum') /
-                        postaggregator.Field('count')),
-            },
-            'paging_spec': {
-                'pagingIdentifies': {},
-                'threshold': 1,
-            },
-            'filter': filters.Dimension('one') == 1,
-            'having': having.Aggregation('sum') > 1,
-            'new_key': 'value',
-        })
+        # given
         expected_query_dict = {
             'queryType': None,
             'dataSource': 'things',
@@ -79,23 +55,53 @@ class TestClient:
             'having': {'aggregation': 'sum', 'type': 'greaterThan', 'value': 1},
             'new_key': 'value',
         }
-        assert client.query_dict == expected_query_dict
+
+        builder = QueryBuilder()
+
+        # when
+        query = builder.build_query(None, {
+            'datasource': 'things',
+            'aggregations': {
+                'count': aggregators.count('thing'),
+            },
+            'post_aggregations': {
+                'avg': (postaggregator.Field('sum') /
+                        postaggregator.Field('count')),
+            },
+            'paging_spec': {
+                'pagingIdentifies': {},
+                'threshold': 1,
+            },
+            'filter': filters.Dimension('one') == 1,
+            'having': having.Aggregation('sum') > 1,
+            'new_key': 'value',
+        })
+
+        # then
+        assert query.query_dict == expected_query_dict
 
     def test_validate_query(self):
-        client = create_client()
-        client.validate_query(['validkey'], {'validkey': 'value'})
-        pytest.raises(ValueError, client.validate_query, *[['validkey'], {'invalidkey': 'value'}])
+        # given
+        builder = QueryBuilder()
 
+        # when
+        builder.validate_query(None, ['validkey'], {'validkey': 'value'})
+
+        # then
+        pytest.raises(ValueError, builder.validate_query, *[None, ['validkey'], {'invalidkey': 'value'}])
+
+
+class TestQuery:
     def test_export_tsv(self, tmpdir):
-        client = create_client_with_results()
+        query = create_query_with_results()
         file_path = tmpdir.join('out.tsv')
-        client.export_tsv(str(file_path))
+        query.export_tsv(str(file_path))
         assert file_path.read() == "value2\tvalue1\ttimestamp" + line_ending() + "㬓\t1\t2015-01-01T00:00:00.000-05:00" + line_ending() + "㬓\t2\t2015-01-02T00:00:00.000-05:00" + line_ending()
 
     @pytest.mark.skipif(pandas is None, reason="requires pandas")
     def test_export_pandas(self):
-        client = create_client_with_results()
-        df = client.export_pandas()
+        query = create_query_with_results()
+        df = query.export_pandas()
         expected_df = pandas.DataFrame([{
             'timestamp': '2015-01-01T00:00:00.000-05:00',
             'value1': 1,
