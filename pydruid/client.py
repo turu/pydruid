@@ -16,24 +16,16 @@
 from __future__ import division
 from __future__ import absolute_import
 
+import json
 import sys
 
 import six
 from six.moves import urllib
 
-try:
-    import pandas
-except ImportError:
-    print('Warning: unable to import Pandas. The export_pandas method will not work.')
-    pass
+from pydruid.query import QueryBuilder
 
-from .utils.aggregators import *
-from .utils.postaggregator import *
-from .utils.filters import *
-from .utils.having import *
-from .utils.query_utils import *
 
-class PyDruid:
+class BaseDruidClient(object):
     """
     PyDruid contains the functions for creating and executing Druid queries, as well as
     for exporting query results into TSV files or pandas.DataFrame objects for subsequent analysis.
@@ -103,219 +95,18 @@ class PyDruid:
     def __init__(self, url, endpoint):
         self.url = url
         self.endpoint = endpoint
-        self.result = None
-        self.result_json = None
-        self.query_type = None
-        self.query_dict = None
+        self.query_builder = QueryBuilder()
 
-    def __post(self, query):
-        try:
-            querystr = json.dumps(query).encode('utf-8')
-            if self.url.endswith('/'):
-                url = self.url + self.endpoint
-            else:
-                url = self.url + '/' + self.endpoint
-            headers = {'Content-Type': 'application/json'}
-            req = urllib.request.Request(url, querystr, headers)
-            res = urllib.request.urlopen(req)
-            data = res.read()
-            self.result_json = data
-            res.close()
-        except urllib.error.HTTPError:
-            _, e, _ = sys.exc_info()
-            err=None
-            if e.code==500:
-                # has Druid returned an error?
-                try:
-                    err= json.loads(e.read())
-                except ValueError:
-                    pass
-                else:
-                    err= err.get('error',None)
-
-            raise IOError('{0} \n Druid Error: {1} \n Query is: {2}'.format(
-                e, err,json.dumps(self.query_dict, indent=4)))
-        else:
-            self.result = self.__parse()
-            return self.result
-
-    def __parse(self):
-        if self.result_json:
-            res = json.loads(self.result_json)
-            return res
-        else:
-            raise IOError('{Error parsing result: {0} for {1} query'.format(
-                self.result_json, self.query_type))
-
-    # --------- Export implementations ---------
-
-    def export_tsv(self, dest_path):
+    def _post(self, query):
         """
-        Export the current query result to a tsv file.
+        :param Query query: query to execute
 
-        :param str dest_path: file to write query results to
-        :raise NotImplementedError:
-
-        Example
-
-        .. code-block:: python
-            :linenos:
-
-                >>> top = query.topn(
-                        datasource='twitterstream',
-                        granularity='all',
-                        intervals='2013-10-04/pt1h',
-                        aggregations={"count": doublesum("count")},
-                        dimension='user_name',
-                        filter = Dimension('user_lang') == 'en',
-                        metric='count',
-                        threshold=2
-                    )
-
-                >>> query.export_tsv('top.tsv')
-                >>> !cat top.tsv
-                >>> count	user_name	timestamp
-                    7.0	user_1	2013-10-04T00:00:00.000Z
-                    6.0	user_2	2013-10-04T00:00:00.000Z
+        :return: The query object filled with results
+        :rtype Query
         """
-        if six.PY3:
-            f = open(dest_path, 'w', newline='', encoding='utf-8')
-        else:
-            f = open(dest_path, 'wb')
-        w = UnicodeWriter(f)
-
-        if self.query_type == "timeseries":
-            header = list(self.result[0]['result'].keys())
-            header.append('timestamp')
-        elif self.query_type == 'topN':
-            header = list(self.result[0]['result'][0].keys())
-            header.append('timestamp')
-        elif self.query_type == "groupBy":
-            header = list(self.result[0]['event'].keys())
-            header.append('timestamp')
-            header.append('version')
-        else:
-            raise NotImplementedError('TSV export not implemented for query type: {0}'.format(self.query_type))
-
-        w.writerow(header)
-
-        if self.result:
-            if self.query_type == "topN" or self.query_type == "timeseries":
-                for item in self.result:
-                    timestamp = item['timestamp']
-                    result = item['result']
-                    if type(result) is list:  # topN
-                        for line in result:
-                            w.writerow(list(line.values()) + [timestamp])
-                    else:  # timeseries
-                        w.writerow(list(result.values()) + [timestamp])
-            elif self.query_type == "groupBy":
-                for item in self.result:
-                    timestamp = item['timestamp']
-                    version = item['version']
-                    w.writerow(
-                        list(item['event'].values()) + [timestamp] + [version])
-
-        f.close()
-
-    def export_pandas(self):
-        """
-        Export the current query result to a Pandas DataFrame object.
-
-        :return: The DataFrame representing the query result
-        :rtype: DataFrame
-        :raise NotImplementedError:
-
-        Example
-
-        .. code-block:: python
-            :linenos:
-
-                >>> top = query.topn(
-                        datasource='twitterstream',
-                        granularity='all',
-                        intervals='2013-10-04/pt1h',
-                        aggregations={"count": doublesum("count")},
-                        dimension='user_name',
-                        filter = Dimension('user_lang') == 'en',
-                        metric='count',
-                        threshold=2
-                    )
-
-                >>> df = query.export_pandas()
-                >>> print df
-                >>>    count                 timestamp      user_name
-                    0      7  2013-10-04T00:00:00.000Z         user_1
-                    1      6  2013-10-04T00:00:00.000Z         user_2
-        """
-        if self.result:
-            if self.query_type == "timeseries":
-                nres = [list(v['result'].items()) + [('timestamp', v['timestamp'])]
-                        for v in self.result]
-                nres = [dict(v) for v in nres]
-            elif self.query_type == "topN":
-                nres = []
-                for item in self.result:
-                    timestamp = item['timestamp']
-                    results = item['result']
-                    tres = [dict(list(res.items()) + [('timestamp', timestamp)])
-                            for res in results]
-                    nres += tres
-            elif self.query_type == "groupBy":
-                nres = [list(v['event'].items()) + [('timestamp', v['timestamp'])]
-                        for v in self.result]
-                nres = [dict(v) for v in nres]
-            else:
-                raise NotImplementedError('Pandas export not implemented for query type: {0}'.format(self.query_type))
-
-            df = pandas.DataFrame(nres)
-            return df
+        raise NotImplementedError()
 
     # --------- Query implementations ---------
-
-    def validate_query(self, valid_parts, args):
-        """
-        Validate the query parts so only allowed objects are sent.
-
-        Each query type can have an optional 'context' object attached which is used to set certain
-        query context settings, etc. timeout or priority. As each query can have this object, there's
-        no need for it to be sent - it might as well be added here.
-
-        :param list valid_parts: a list of valid object names
-        :param dict args: the dict of args to be sent
-        :raise ValueError: if an invalid object is given
-        """
-        valid_parts = valid_parts[:] + ['context']
-        for key, val in six.iteritems(args):
-            if key not in valid_parts:
-                raise ValueError(
-                    'Query component: {0} is not valid for query type: {1}.'
-                    .format(key, self.query_type) +
-                    'The list of valid components is: \n {0}'
-                    .format(valid_parts))
-
-    def build_query(self, args):
-        query_dict = {'queryType': self.query_type}
-
-        for key, val in six.iteritems(args):
-            if key == 'aggregations':
-                query_dict[key] = build_aggregators(val)
-            elif key == 'post_aggregations':
-                query_dict['postAggregations'] = Postaggregator.build_post_aggregators(val)
-            elif key == 'datasource':
-                query_dict['dataSource'] = val
-            elif key == 'paging_spec':
-                query_dict['pagingSpec'] = val
-            elif key == 'limit_spec':
-                query_dict['limitSpec'] = val
-            elif key == "filter":
-                query_dict[key] = Filter.build_filter(val)
-            elif key == "having":
-                query_dict[key] = Having.build_having(val)
-            else:
-                query_dict[key] = val
-
-        self.query_dict = query_dict
 
     def topn(self, **kwargs):
         """
@@ -348,7 +139,7 @@ class PyDruid:
         .. code-block:: python
             :linenos:
 
-                >>> top = query.topn(
+                >>> top = client.topn(
                             datasource='twitterstream',
                             granularity='all',
                             intervals='2013-06-14/pt1h',
@@ -362,15 +153,8 @@ class PyDruid:
                 >>> print top
                 >>> [{'timestamp': '2013-06-14T00:00:00.000Z', 'result': [{'count': 22.0, 'user': "cool_user"}}]}]
         """
-        self.query_type = 'topN'
-        valid_parts = [
-            'datasource', 'granularity', 'filter', 'aggregations',
-            'post_aggregations', 'intervals', 'dimension', 'threshold',
-            'metric'
-        ]
-        self.validate_query(valid_parts, kwargs)
-        self.build_query(kwargs)
-        return self.__post(self.query_dict)
+        query = self.query_builder.topn(kwargs)
+        return self._post(query)
 
     def timeseries(self, **kwargs):
         """
@@ -398,7 +182,7 @@ class PyDruid:
         .. code-block:: python
             :linenos:
 
-                >>> counts = query.timeseries(
+                >>> counts = client.timeseries(
                         datasource=twitterstream,
                         granularity='hour',
                         intervals='2013-06-14/pt1h',
@@ -409,14 +193,8 @@ class PyDruid:
                 >>> print counts
                 >>> [{'timestamp': '2013-06-14T00:00:00.000Z', 'result': {'count': 9619.0, 'rows': 8007, 'percent': 120.13238416385663}}]
         """
-        self.query_type = 'timeseries'
-        valid_parts = [
-            'datasource', 'granularity', 'filter', 'aggregations',
-            'post_aggregations', 'intervals'
-        ]
-        self.validate_query(valid_parts, kwargs)
-        self.build_query(kwargs)
-        return self.__post(self.query_dict)
+        query = self.query_builder.timeseries(kwargs)
+        return self._post(query)
 
     def groupby(self, **kwargs):
         """
@@ -447,7 +225,7 @@ class PyDruid:
         .. code-block:: python
             :linenos:
 
-                >>> group = query.groupby(
+                >>> group = client.groupby(
                         datasource='twitterstream',
                         granularity='hour',
                         intervals='2013-10-04/pt1h',
@@ -466,16 +244,8 @@ class PyDruid:
                 >>> {'timestamp': '2013-10-04T00:00:00.000Z', 'version': 'v1', 'event': {'count': 1.0, 'user_name': 'user_1', 'reply_to_name': 'user_2'}}
                 >>> {'timestamp': '2013-10-04T00:00:00.000Z', 'version': 'v1', 'event': {'count': 1.0, 'user_name': 'user_2', 'reply_to_name': 'user_3'}}
         """
-
-        self.query_type = 'groupBy'
-        valid_parts = [
-            'datasource', 'granularity', 'filter', 'aggregations',
-            'having', 'post_aggregations', 'intervals', 'dimensions',
-            'limit_spec',
-        ]
-        self.validate_query(valid_parts, kwargs)
-        self.build_query(kwargs)
-        return self.__post(self.query_dict)
+        query = self.query_builder.groupby(kwargs)
+        return self._post(query)
 
     def segment_metadata(self, **kwargs):
         """
@@ -506,18 +276,15 @@ class PyDruid:
         .. code-block:: python
             :linenos:
 
-                >>> meta = query.segment_metadata(datasource='twitterstream', intervals = '2013-10-04/pt1h')
+                >>> meta = client.segment_metadata(datasource='twitterstream', intervals = '2013-10-04/pt1h')
                 >>> print meta[0].keys()
                 >>> ['intervals', 'id', 'columns', 'size']
                 >>> print meta[0]['columns']['tweet_length']
                 >>> {'errorMessage': None, 'cardinality': None, 'type': 'FLOAT', 'size': 30908008}
 
         """
-        self.query_type = 'segmentMetadata'
-        valid_parts = ['datasource', 'intervals']
-        self.validate_query(valid_parts, kwargs)
-        self.build_query(kwargs)
-        return self.__post(self.query_dict)
+        query = self.query_builder.segment_metadata(kwargs)
+        return self._post(query)
 
     def time_boundary(self, **kwargs):
         """
@@ -539,15 +306,12 @@ class PyDruid:
         .. code-block:: python
             :linenos:
 
-                >>> bound = query.time_boundary(datasource='twitterstream')
+                >>> bound = client.time_boundary(datasource='twitterstream')
                 >>> print bound
                 >>> [{'timestamp': '2011-09-14T15:00:00.000Z', 'result': {'minTime': '2011-09-14T15:00:00.000Z', 'maxTime': '2014-03-04T23:44:00.000Z'}}]
         """
-        self.query_type = 'timeBoundary'
-        valid_parts = ['datasource']
-        self.validate_query(valid_parts, kwargs)
-        self.build_query(kwargs)
-        return self.__post(self.query_dict)
+        query = self.query_builder.time_boundary(kwargs)
+        return self._post(query)
 
     def select(self, **kwargs):
         """
@@ -576,7 +340,7 @@ class PyDruid:
         .. code-block:: python
             :linenos:
 
-                >>> raw_data = query.select(
+                >>> raw_data = client.select(
                         datasource=twitterstream,
                         granularity='all',
                         intervals='2013-06-14/pt1h',
@@ -586,11 +350,66 @@ class PyDruid:
                 >>> print raw_data
                 >>> [{'timestamp': '2013-06-14T00:00:00.000Z', 'result': {'pagingIdentifiers': {'twitterstream_2013-06-14T00:00:00.000Z_2013-06-15T00:00:00.000Z_2013-06-15T08:00:00.000Z_v1': 1, 'events': [{'segmentId': 'twitterstream_2013-06-14T00:00:00.000Z_2013-06-15T00:00:00.000Z_2013-06-15T08:00:00.000Z_v1', 'offset': 0, 'event': {'timestamp': '2013-06-14T00:00:00.000Z', 'dim': 'value'}}]}}]
         """
-        self.query_type = 'select'
-        valid_parts = [
-            'datasource', 'granularity', 'filter', 'dimensions', 'metrics',
-            'paging_spec', 'intervals'
-        ]
-        self.validate_query(valid_parts, kwargs)
-        self.build_query(kwargs)
-        return self.__post(self.query_dict)
+        query = self.query_builder.select(kwargs)
+        return self._post(query)
+
+
+class PyDruid(BaseDruidClient):
+    """
+    Synchronous implementation of Druid client.
+    """
+
+    def __init__(self, url, endpoint):
+        super(PyDruid, self).__init__(url, endpoint)
+
+    def _post(self, query):
+        try:
+            querystr = json.dumps(query.query_dict).encode('utf-8')
+            if self.url.endswith('/'):
+                url = self.url + self.endpoint
+            else:
+                url = self.url + '/' + self.endpoint
+            headers = {'Content-Type': 'application/json'}
+            req = urllib.request.Request(url, querystr, headers)
+            res = urllib.request.urlopen(req)
+            data = res.read()
+            query.result_json = data
+            res.close()
+        except urllib.error.HTTPError:
+            _, e, _ = sys.exc_info()
+            err = None
+            if e.code == 500:
+                # has Druid returned an error?
+                try:
+                    err = json.loads(e.read())
+                except ValueError:
+                    pass
+                else:
+                    err = err.get('error', None)
+
+            raise IOError('{0} \n Druid Error: {1} \n Query is: {2}'.format(
+                    e, err, json.dumps(query.query_dict, indent=4)))
+        else:
+            query.result = self.__parse(query)
+            return query
+
+    @staticmethod
+    def __parse(query):
+        if query.result_json:
+            res = json.loads(query.result_json)
+            return res
+        else:
+            raise IOError('{Error parsing result: {0} for {1} query'.format(
+                    query.result_json, query.query_type))
+
+
+class AsyncPyDruid(BaseDruidClient):
+    """
+    Asynchronous implementation of Druid client.
+    """
+
+    def __init__(self, url, endpoint):
+        super(AsyncPyDruid, self).__init__(url, endpoint)
+
+    def _post(self, query):
+        pass
