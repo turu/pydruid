@@ -25,7 +25,7 @@ from six.moves import urllib
 from pydruid.query import QueryBuilder
 
 
-class PyDruid(object):
+class BaseDruidClient(object):
     """
     PyDruid contains the functions for creating and executing Druid queries, as well as
     for exporting query results into TSV files or pandas.DataFrame objects for subsequent analysis.
@@ -97,45 +97,14 @@ class PyDruid(object):
         self.endpoint = endpoint
         self.query_builder = QueryBuilder()
 
-    def __post(self, query):
-        try:
-            querystr = json.dumps(query.query_dict).encode('utf-8')
-            if self.url.endswith('/'):
-                url = self.url + self.endpoint
-            else:
-                url = self.url + '/' + self.endpoint
-            headers = {'Content-Type': 'application/json'}
-            req = urllib.request.Request(url, querystr, headers)
-            res = urllib.request.urlopen(req)
-            data = res.read()
-            query.result_json = data
-            res.close()
-        except urllib.error.HTTPError:
-            _, e, _ = sys.exc_info()
-            err = None
-            if e.code == 500:
-                # has Druid returned an error?
-                try:
-                    err = json.loads(e.read())
-                except ValueError:
-                    pass
-                else:
-                    err = err.get('error',None)
+    def _post(self, query):
+        """
+        :param Query query: query to execute
 
-            raise IOError('{0} \n Druid Error: {1} \n Query is: {2}'.format(
-                e, err,json.dumps(query.query_dict, indent=4)))
-        else:
-            query.result = self.__parse(query)
-            return query.result
-
-    @staticmethod
-    def __parse(query):
-        if query.result_json:
-            res = json.loads(query.result_json)
-            return res
-        else:
-            raise IOError('{Error parsing result: {0} for {1} query'.format(
-                query.result_json, query.query_type))
+        :return: The query object filled with results
+        :rtype Query
+        """
+        raise NotImplementedError()
 
     # --------- Query implementations ---------
 
@@ -185,7 +154,7 @@ class PyDruid(object):
                 >>> [{'timestamp': '2013-06-14T00:00:00.000Z', 'result': [{'count': 22.0, 'user': "cool_user"}}]}]
         """
         query = self.query_builder.topn(kwargs)
-        return self.__post(query)
+        return self._post(query)
 
     def timeseries(self, **kwargs):
         """
@@ -225,7 +194,7 @@ class PyDruid(object):
                 >>> [{'timestamp': '2013-06-14T00:00:00.000Z', 'result': {'count': 9619.0, 'rows': 8007, 'percent': 120.13238416385663}}]
         """
         query = self.query_builder.timeseries(kwargs)
-        return self.__post(query)
+        return self._post(query)
 
     def groupby(self, **kwargs):
         """
@@ -276,7 +245,7 @@ class PyDruid(object):
                 >>> {'timestamp': '2013-10-04T00:00:00.000Z', 'version': 'v1', 'event': {'count': 1.0, 'user_name': 'user_2', 'reply_to_name': 'user_3'}}
         """
         query = self.query_builder.groupby(kwargs)
-        return self.__post(query)
+        return self._post(query)
 
     def segment_metadata(self, **kwargs):
         """
@@ -315,7 +284,7 @@ class PyDruid(object):
 
         """
         query = self.query_builder.segment_metadata(kwargs)
-        return self.__post(query)
+        return self._post(query)
 
     def time_boundary(self, **kwargs):
         """
@@ -342,7 +311,7 @@ class PyDruid(object):
                 >>> [{'timestamp': '2011-09-14T15:00:00.000Z', 'result': {'minTime': '2011-09-14T15:00:00.000Z', 'maxTime': '2014-03-04T23:44:00.000Z'}}]
         """
         query = self.query_builder.time_boundary(kwargs)
-        return self.__post(query)
+        return self._post(query)
 
     def select(self, **kwargs):
         """
@@ -382,4 +351,65 @@ class PyDruid(object):
                 >>> [{'timestamp': '2013-06-14T00:00:00.000Z', 'result': {'pagingIdentifiers': {'twitterstream_2013-06-14T00:00:00.000Z_2013-06-15T00:00:00.000Z_2013-06-15T08:00:00.000Z_v1': 1, 'events': [{'segmentId': 'twitterstream_2013-06-14T00:00:00.000Z_2013-06-15T00:00:00.000Z_2013-06-15T08:00:00.000Z_v1', 'offset': 0, 'event': {'timestamp': '2013-06-14T00:00:00.000Z', 'dim': 'value'}}]}}]
         """
         query = self.query_builder.select(kwargs)
-        return self.__post(query)
+        return self._post(query)
+
+
+class PyDruid(BaseDruidClient):
+    """
+    Synchronous implementation of Druid client.
+    """
+
+    def __init__(self, url, endpoint):
+        super(PyDruid, self).__init__(url, endpoint)
+
+    def _post(self, query):
+        try:
+            querystr = json.dumps(query.query_dict).encode('utf-8')
+            if self.url.endswith('/'):
+                url = self.url + self.endpoint
+            else:
+                url = self.url + '/' + self.endpoint
+            headers = {'Content-Type': 'application/json'}
+            req = urllib.request.Request(url, querystr, headers)
+            res = urllib.request.urlopen(req)
+            data = res.read()
+            query.result_json = data
+            res.close()
+        except urllib.error.HTTPError:
+            _, e, _ = sys.exc_info()
+            err = None
+            if e.code == 500:
+                # has Druid returned an error?
+                try:
+                    err = json.loads(e.read())
+                except ValueError:
+                    pass
+                else:
+                    err = err.get('error', None)
+
+            raise IOError('{0} \n Druid Error: {1} \n Query is: {2}'.format(
+                    e, err, json.dumps(query.query_dict, indent=4)))
+        else:
+            query.result = self.__parse(query)
+            return query
+
+    @staticmethod
+    def __parse(query):
+        if query.result_json:
+            res = json.loads(query.result_json)
+            return res
+        else:
+            raise IOError('{Error parsing result: {0} for {1} query'.format(
+                    query.result_json, query.query_type))
+
+
+class AsyncPyDruid(BaseDruidClient):
+    """
+    Asynchronous implementation of Druid client.
+    """
+
+    def __init__(self, url, endpoint):
+        super(AsyncPyDruid, self).__init__(url, endpoint)
+
+    def _post(self, query):
+        pass
