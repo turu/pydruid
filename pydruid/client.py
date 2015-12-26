@@ -104,7 +104,7 @@ class BaseDruidClient(object):
         :return: The query object filled with results
         :rtype Query
         """
-        raise NotImplementedError()
+        raise NotImplementedError("Subclasses must implement this method")
 
     # --------- Query implementations ---------
 
