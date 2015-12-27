@@ -1,5 +1,5 @@
 import six
-
+import json
 from pydruid.utils.aggregators import build_aggregators
 from pydruid.utils.filters import Filter
 from pydruid.utils.having import Having
@@ -19,6 +19,15 @@ class Query(object):
         self.query_type = query_type
         self.result = None
         self.result_json = None
+
+    def parse(self, data):
+        if data:
+            self.result_json = data
+            res = json.loads(self.result_json)
+            self.result = res
+        else:
+            raise IOError('{Error parsing result: {0} for {1} query'.format(
+                    self.result_json, self.query_type))
 
     def export_tsv(self, dest_path):
         """

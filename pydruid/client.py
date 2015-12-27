@@ -22,6 +22,9 @@ import sys
 import six
 from six.moves import urllib
 
+from tornado import gen
+from tornado.httpclient import AsyncHTTPClient
+
 from pydruid.query import QueryBuilder
 
 
@@ -96,6 +99,15 @@ class BaseDruidClient(object):
         self.url = url
         self.endpoint = endpoint
         self.query_builder = QueryBuilder()
+
+    def _prepare_url_headers_and_body(self, query):
+        querystr = json.dumps(query.query_dict).encode('utf-8')
+        if self.url.endswith('/'):
+            url = self.url + self.endpoint
+        else:
+            url = self.url + '/' + self.endpoint
+        headers = {'Content-Type': 'application/json'}
+        return headers, querystr, url
 
     def _post(self, query):
         """
@@ -358,22 +370,15 @@ class PyDruid(BaseDruidClient):
     """
     Synchronous implementation of Druid client.
     """
-
     def __init__(self, url, endpoint):
         super(PyDruid, self).__init__(url, endpoint)
 
     def _post(self, query):
         try:
-            querystr = json.dumps(query.query_dict).encode('utf-8')
-            if self.url.endswith('/'):
-                url = self.url + self.endpoint
-            else:
-                url = self.url + '/' + self.endpoint
-            headers = {'Content-Type': 'application/json'}
+            headers, querystr, url = self._prepare_url_headers_and_body(query)
             req = urllib.request.Request(url, querystr, headers)
             res = urllib.request.urlopen(req)
             data = res.read()
-            query.result_json = data
             res.close()
         except urllib.error.HTTPError:
             _, e, _ = sys.exc_info()
@@ -390,17 +395,8 @@ class PyDruid(BaseDruidClient):
             raise IOError('{0} \n Druid Error: {1} \n Query is: {2}'.format(
                     e, err, json.dumps(query.query_dict, indent=4)))
         else:
-            query.result = self.__parse(query)
+            query.parse(data)
             return query
-
-    @staticmethod
-    def __parse(query):
-        if query.result_json:
-            res = json.loads(query.result_json)
-            return res
-        else:
-            raise IOError('{Error parsing result: {0} for {1} query'.format(
-                    query.result_json, query.query_type))
 
 
 class AsyncPyDruid(BaseDruidClient):
@@ -411,5 +407,61 @@ class AsyncPyDruid(BaseDruidClient):
     def __init__(self, url, endpoint):
         super(AsyncPyDruid, self).__init__(url, endpoint)
 
+    @gen.coroutine
     def _post(self, query):
-        pass
+        http_client = AsyncHTTPClient()
+        try:
+            headers, querystr, url = self._prepare_url_headers_and_body(query)
+            response = yield http_client.fetch(url, method='POST', headers=headers, body=querystr)
+        except http_client.HTTPError as e:
+            err = None
+            if e.code == 500:
+                # has Druid returned an error?
+                try:
+                    err = json.loads(e.read())
+                except ValueError:
+                    pass
+                else:
+                    err = err.get('error', None)
+
+            raise IOError('{0} \n Druid Error: {1} \n Query is: {2}'.format(
+                    e, err, json.dumps(query.query_dict, indent=4)))
+        else:
+            query.parse(response.body)
+            raise gen.Return(query)
+
+    @gen.coroutine
+    def topn(self, **kwargs):
+        query = self.query_builder.topn(kwargs)
+        result = yield self._post(query)
+        raise gen.Return(result)
+
+    @gen.coroutine
+    def timeseries(self, **kwargs):
+        query = self.query_builder.timeseries(kwargs)
+        result = yield self._post(query)
+        raise gen.Return(result)
+
+    @gen.coroutine
+    def groupby(self, **kwargs):
+        query = self.query_builder.groupby(kwargs)
+        result = yield self._post(query)
+        raise gen.Return(result)
+
+    @gen.coroutine
+    def segment_metadata(self, **kwargs):
+        query = self.query_builder.segment_metadata(kwargs)
+        result = yield self._post(query)
+        raise gen.Return(result)
+
+    @gen.coroutine
+    def time_boundary(self, **kwargs):
+        query = self.query_builder.time_boundary(kwargs)
+        result = yield self._post(query)
+        raise gen.Return(result)
+
+    @gen.coroutine
+    def select(self, **kwargs):
+        query = self.query_builder.select(kwargs)
+        result = yield self._post(query)
+        raise gen.Return(result)
