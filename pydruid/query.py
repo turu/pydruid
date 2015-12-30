@@ -151,6 +151,9 @@ class Query(object):
             df = pandas.DataFrame(nres)
             return df
 
+    def __str__(self):
+        return self.result_json
+
 
 class QueryBuilder(object):
     def __init__(self):
