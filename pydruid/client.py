@@ -19,11 +19,10 @@ from __future__ import absolute_import
 import json
 import sys
 
-import six
 from six.moves import urllib
 
 from tornado import gen
-from tornado.httpclient import AsyncHTTPClient
+from tornado.httpclient import AsyncHTTPClient, HTTPError
 
 from pydruid.query import QueryBuilder
 
@@ -413,12 +412,12 @@ class AsyncPyDruid(BaseDruidClient):
         try:
             headers, querystr, url = self._prepare_url_headers_and_body(query)
             response = yield http_client.fetch(url, method='POST', headers=headers, body=querystr)
-        except http_client.HTTPError as e:
+        except HTTPError as e:
             err = None
             if e.code == 500:
                 # has Druid returned an error?
                 try:
-                    err = json.loads(e.read())
+                    err = json.loads(e.response)
                 except ValueError:
                     pass
                 else:
