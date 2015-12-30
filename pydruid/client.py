@@ -386,7 +386,7 @@ class PyDruid(BaseDruidClient):
                 # has Druid returned an error?
                 try:
                     err = json.loads(e.read())
-                except ValueError:
+                except (ValueError, AttributeError):
                     pass
                 else:
                     err = err.get('error', None)

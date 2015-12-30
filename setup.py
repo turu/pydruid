@@ -40,6 +40,6 @@ setup(
     description='A Python connector for Druid.',
     long_description='See https://github.com/druid-io/pydruid for more information.',
     install_requires=install_requires,
-    tests_require=['pytest', 'six', 'tornado'],
+    tests_require=['pytest', 'six', 'tornado', 'mock'],
     cmdclass={'test': PyTest},
 )
