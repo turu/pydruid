@@ -418,7 +418,7 @@ class AsyncPyDruid(BaseDruidClient):
                 # has Druid returned an error?
                 try:
                     err = json.loads(e.response)
-                except ValueError:
+                except (ValueError, TypeError):
                     pass
                 else:
                     err = err.get('error', None)
