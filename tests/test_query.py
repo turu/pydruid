@@ -4,6 +4,7 @@ import os
 import pytest
 
 from pydruid.query import QueryBuilder, Query
+import csv
 
 try:
     import pandas
@@ -27,10 +28,25 @@ def create_query_with_results():
     return query
 
 
-def line_ending():
-    if PY3:
-        return os.linesep
-    return "\r\n"
+EXPECTED_RESULTS_PANDAS = [{
+            'timestamp': '2015-01-01T00:00:00.000-05:00',
+            'value1': 1,
+            'value2': '㬓',
+        }, {
+            'timestamp': '2015-01-02T00:00:00.000-05:00',
+            'value1': 2,
+            'value2': '㬓',
+        }]
+
+
+def expected_results_csv_reader():
+    # csv.DictReader does not perform promotion to int64
+    expected_results = []
+    for element in EXPECTED_RESULTS_PANDAS:
+        modified_elem = element.copy()
+        modified_elem.update({'value1': str(modified_elem['value1'])})
+        expected_results.append(modified_elem)
+    return expected_results
 
 
 class TestQueryBuilder:
@@ -96,19 +112,15 @@ class TestQuery:
         query = create_query_with_results()
         file_path = tmpdir.join('out.tsv')
         query.export_tsv(str(file_path))
-        assert file_path.read() == "value2\tvalue1\ttimestamp" + line_ending() + "㬓\t1\t2015-01-01T00:00:00.000-05:00" + line_ending() + "㬓\t2\t2015-01-02T00:00:00.000-05:00" + line_ending()
+
+        with open(str(file_path)) as tsv_file:
+            reader = csv.DictReader(tsv_file, delimiter="\t")
+            actual = [line for line in reader]
+            assert actual == expected_results_csv_reader()
 
     @pytest.mark.skipif(pandas is None, reason="requires pandas")
     def test_export_pandas(self):
         query = create_query_with_results()
         df = query.export_pandas()
-        expected_df = pandas.DataFrame([{
-            'timestamp': '2015-01-01T00:00:00.000-05:00',
-            'value1': 1,
-            'value2': '㬓',
-        }, {
-            'timestamp': '2015-01-02T00:00:00.000-05:00',
-            'value1': 2,
-            'value2': '㬓',
-        }])
+        expected_df = pandas.DataFrame(EXPECTED_RESULTS_PANDAS)
         assert_frame_equal(df, expected_df)
