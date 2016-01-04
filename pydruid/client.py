@@ -377,7 +377,7 @@ class PyDruid(BaseDruidClient):
             headers, querystr, url = self._prepare_url_headers_and_body(query)
             req = urllib.request.Request(url, querystr, headers)
             res = urllib.request.urlopen(req)
-            data = res.read()
+            data = res.read().decode("utf-8")
             res.close()
         except urllib.error.HTTPError:
             _, e, _ = sys.exc_info()
@@ -385,7 +385,7 @@ class PyDruid(BaseDruidClient):
             if e.code == 500:
                 # has Druid returned an error?
                 try:
-                    err = json.loads(e.read())
+                    err = json.loads(e.read().decode("utf-8"))
                 except (ValueError, AttributeError, KeyError):
                     pass
                 else:
