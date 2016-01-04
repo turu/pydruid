@@ -50,7 +50,7 @@ class TestPyDruid:
     "metric" : 100
   } ]
             } ]
-        """
+        """.encode("utf-8")
         mock_urlopen.return_value = response
         client = create_client()
 
