@@ -386,7 +386,7 @@ class PyDruid(BaseDruidClient):
                 # has Druid returned an error?
                 try:
                     err = json.loads(e.read())
-                except (ValueError, AttributeError):
+                except (ValueError, AttributeError, KeyError):
                     pass
                 else:
                     err = err.get('error', None)
@@ -417,8 +417,8 @@ class AsyncPyDruid(BaseDruidClient):
             if e.code == 500:
                 # has Druid returned an error?
                 try:
-                    err = json.loads(e.response)
-                except (ValueError, TypeError):
+                    err = json.loads(e.response.body.decode("utf-8"))
+                except ValueError:
                     pass
                 else:
                     err = err.get('error', None)
@@ -426,7 +426,7 @@ class AsyncPyDruid(BaseDruidClient):
             raise IOError('{0} \n Druid Error: {1} \n Query is: {2}'.format(
                     e, err, json.dumps(query.query_dict, indent=4)))
         else:
-            query.parse(response.body)
+            query.parse(response.body.decode("utf-8"))
             raise gen.Return(query)
 
     @gen.coroutine
