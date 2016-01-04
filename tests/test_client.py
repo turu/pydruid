@@ -74,7 +74,7 @@ class TestPyDruid:
 
 class FailureHandler(tornado.web.RequestHandler):
     def post(self):
-        raise HTTPError(500, "Druid error", response="")
+        raise HTTPError(500, "Druid error", response="Druid error")
 
 
 class SuccessHandler(tornado.web.RequestHandler):
