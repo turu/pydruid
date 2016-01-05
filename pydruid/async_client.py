@@ -28,7 +28,67 @@ except ImportError:
 
 class AsyncPyDruid(BaseDruidClient):
     """
-    Asynchronous implementation of Druid client.
+    Asynchronous PyDruid client which mirrors functionality of the synchronous PyDruid, but it executes queries
+    asynchronously (using an asynchronous http client from Tornado framework).
+
+    Returns Query objects that can be used for exporting query results into TSV files or pandas.DataFrame objects
+    for subsequent analysis.
+
+    :param str url: URL of Broker node in the Druid cluster
+    :param str endpoint: Endpoint that Broker listens for queries on
+
+    Example
+
+    .. code-block:: python
+        :linenos:
+
+            >>> from pydruid.async_client import *
+
+            >>> query = AsyncPyDruid('http://localhost:8083', 'druid/v2/')
+
+            >>> top = yield query.topn(
+                    datasource='twitterstream',
+                    granularity='all',
+                    intervals='2013-10-04/pt1h',
+                    aggregations={"count": doublesum("count")},
+                    dimension='user_name',
+                    filter = Dimension('user_lang') == 'en',
+                    metric='count',
+                    threshold=2
+                )
+
+            >>> print json.dumps(top.query_dict, indent=2)
+            >>> {
+                  "metric": "count",
+                  "aggregations": [
+                    {
+                      "type": "doubleSum",
+                      "fieldName": "count",
+                      "name": "count"
+                    }
+                  ],
+                  "dimension": "user_name",
+                  "filter": {
+                    "type": "selector",
+                    "dimension": "user_lang",
+                    "value": "en"
+                  },
+                  "intervals": "2013-10-04/pt1h",
+                  "dataSource": "twitterstream",
+                  "granularity": "all",
+                  "threshold": 2,
+                  "queryType": "topN"
+                }
+
+            >>> print top.result
+            >>> [{'timestamp': '2013-10-04T00:00:00.000Z',
+                'result': [{'count': 7.0, 'user_name': 'user_1'}, {'count': 6.0, 'user_name': 'user_2'}]}]
+
+            >>> df = top.export_pandas()
+            >>> print df
+            >>>    count                 timestamp      user_name
+                0      7  2013-10-04T00:00:00.000Z         user_1
+                1      6  2013-10-04T00:00:00.000Z         user_2
     """
 
     def __init__(self, url, endpoint):
@@ -41,21 +101,24 @@ class AsyncPyDruid(BaseDruidClient):
             headers, querystr, url = self._prepare_url_headers_and_body(query)
             response = yield http_client.fetch(url, method='POST', headers=headers, body=querystr)
         except HTTPError as e:
-            err = None
-            if e.code == 500:
-                # has Druid returned an error?
-                try:
-                    err = json.loads(e.response.body.decode("utf-8"))
-                except ValueError:
-                    pass
-                else:
-                    err = err.get('error', None)
-
-            raise IOError('{0} \n Druid Error: {1} \n Query is: {2}'.format(
-                    e, err, json.dumps(query.query_dict, indent=4)))
+            self.__handle_http_error(e, query)
         else:
             query.parse(response.body.decode("utf-8"))
             raise gen.Return(query)
+
+    @staticmethod
+    def __handle_http_error(e, query):
+        err = None
+        if e.code == 500:
+            # has Druid returned an error?
+            try:
+                err = json.loads(e.response.body.decode("utf-8"))
+            except ValueError:
+                pass
+            else:
+                err = err.get('error', None)
+        raise IOError('{0} \n Druid Error: {1} \n Query is: {2}'.format(
+                e, err, json.dumps(query.query_dict, indent=4)))
 
     @gen.coroutine
     def topn(self, **kwargs):
