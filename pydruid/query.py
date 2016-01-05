@@ -186,7 +186,7 @@ class Query(collections.MutableSequence):
 
 class QueryBuilder(object):
     def __init__(self):
-        pass
+        self.last_query = None
 
     @staticmethod
     def validate_query(query_type, valid_parts, args):
@@ -211,8 +211,7 @@ class QueryBuilder(object):
                         'The list of valid components is: \n {0}'
                         .format(valid_parts))
 
-    @staticmethod
-    def build_query(query_type, args):
+    def build_query(self, query_type, args):
         """
         Build query based on given query type and arguments.
 
@@ -241,7 +240,8 @@ class QueryBuilder(object):
             else:
                 query_dict[key] = val
 
-        return Query(query_dict, query_type)
+        self.last_query = Query(query_dict, query_type)
+        return self.last_query
 
     def topn(self, args):
         """

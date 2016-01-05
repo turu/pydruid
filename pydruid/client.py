@@ -41,10 +41,12 @@ class BaseDruidClient(object):
 
     def _post(self, query):
         """
+        Fills Query object with results.
+
         :param Query query: query to execute
 
-        :return: The query object filled with results
-        :rtype Query
+        :return: Query filled with results
+        :rtype: Query
         """
         raise NotImplementedError("Subclasses must implement this method")
 
@@ -294,6 +296,28 @@ class BaseDruidClient(object):
         """
         query = self.query_builder.select(kwargs)
         return self._post(query)
+
+    def export_tsv(self, dest_path):
+        """
+        (Deprecated) Use Query.export_tsv() method instead.
+
+        Export the current query result to a tsv file.
+        """
+        if self.query_builder.last_query is None:
+            raise AttributeError("There was no query executed by this client yet. Can't export!")
+        else:
+            return self.query_builder.last_query.export_tsv(dest_path)
+
+    def export_pandas(self):
+        """
+        (Deprecated) Use Query.export_pandas() method instead
+
+        Export the current query result to a Pandas DataFrame object.
+        """
+        if self.query_builder.last_query is None:
+            raise AttributeError("There was no query executed by this client yet. Can't export!")
+        else:
+            return self.query_builder.last_query.export_pandas()
 
 
 class PyDruid(BaseDruidClient):

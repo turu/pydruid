@@ -124,3 +124,12 @@ class TestQuery:
         df = query.export_pandas()
         expected_df = pandas.DataFrame(EXPECTED_RESULTS_PANDAS)
         assert_frame_equal(df, expected_df)
+
+    def test_query_acts_as_a_wrapper_for_raw_result(self):
+        # given
+        query = create_query_with_results()
+
+        # then
+        assert len(query) == 2
+        assert isinstance(query[0], dict)
+        assert isinstance(query[1], dict)
