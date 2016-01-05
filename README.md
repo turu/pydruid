@@ -5,7 +5,7 @@ It provides both synchronous and asynchronous clients.
 To install:
 ```python
 pip install pydruid
-# or, if you intend to use synchronous client
+# or, if you intend to use asynchronous client
 pip install pydruid[async]
 # or, if you intend to export query results into pandas
 pip install pydruid[pandas]
@@ -138,7 +138,7 @@ def your_asynchronous_method_serving_top10_mentions_for_day(day
     top_mentions = yield client.topn(
         datasource='twitterstream',
         granularity='all',
-        intervals="%s/p1d" % (day, ),  # utc time of 2014 oscars
+        intervals="%s/p1d" % (day, ),
         aggregations={'count': doublesum('count')},
         dimension='user_mention_name',
         filter=(Dimension('user_lang') == 'en') & (Dimension('first_hashtag') == 'oscars') &
