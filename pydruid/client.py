@@ -21,9 +21,6 @@ import sys
 
 from six.moves import urllib
 
-from tornado import gen
-from tornado.httpclient import AsyncHTTPClient, HTTPError
-
 from pydruid.query import QueryBuilder
 
 
@@ -396,71 +393,3 @@ class PyDruid(BaseDruidClient):
         else:
             query.parse(data)
             return query
-
-
-class AsyncPyDruid(BaseDruidClient):
-    """
-    Asynchronous implementation of Druid client.
-    """
-
-    def __init__(self, url, endpoint):
-        super(AsyncPyDruid, self).__init__(url, endpoint)
-
-    @gen.coroutine
-    def _post(self, query):
-        http_client = AsyncHTTPClient()
-        try:
-            headers, querystr, url = self._prepare_url_headers_and_body(query)
-            response = yield http_client.fetch(url, method='POST', headers=headers, body=querystr)
-        except HTTPError as e:
-            err = None
-            if e.code == 500:
-                # has Druid returned an error?
-                try:
-                    err = json.loads(e.response.body.decode("utf-8"))
-                except ValueError:
-                    pass
-                else:
-                    err = err.get('error', None)
-
-            raise IOError('{0} \n Druid Error: {1} \n Query is: {2}'.format(
-                    e, err, json.dumps(query.query_dict, indent=4)))
-        else:
-            query.parse(response.body.decode("utf-8"))
-            raise gen.Return(query)
-
-    @gen.coroutine
-    def topn(self, **kwargs):
-        query = self.query_builder.topn(kwargs)
-        result = yield self._post(query)
-        raise gen.Return(result)
-
-    @gen.coroutine
-    def timeseries(self, **kwargs):
-        query = self.query_builder.timeseries(kwargs)
-        result = yield self._post(query)
-        raise gen.Return(result)
-
-    @gen.coroutine
-    def groupby(self, **kwargs):
-        query = self.query_builder.groupby(kwargs)
-        result = yield self._post(query)
-        raise gen.Return(result)
-
-    @gen.coroutine
-    def segment_metadata(self, **kwargs):
-        query = self.query_builder.segment_metadata(kwargs)
-        result = yield self._post(query)
-        raise gen.Return(result)
-
-    @gen.coroutine
-    def time_boundary(self, **kwargs):
-        query = self.query_builder.time_boundary(kwargs)
-        result = yield self._post(query)
-        raise gen.Return(result)
-
-    @gen.coroutine
-    def select(self, **kwargs):
-        query = self.query_builder.select(kwargs)
-        result = yield self._post(query)
-        raise gen.Return(result)
