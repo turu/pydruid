@@ -1,5 +1,6 @@
 import six
 import json
+import collections
 from pydruid.utils.aggregators import build_aggregators
 from pydruid.utils.filters import Filter
 from pydruid.utils.having import Having
@@ -13,8 +14,21 @@ except ImportError:
     pass
 
 
-class Query(object):
+class Query(collections.MutableSequence):
+    """
+    Query objects are produced by PyDruid clients and can be used for exporting query results into TSV files or
+    pandas.DataFrame objects for subsequent analysis. They also hold information about the issued query.
+
+    Query acts as a wrapper over raw result list of dictionaries.
+
+    :ivar str result_json: JSON object representing a query result. Initial value: None
+    :ivar list result: Query result parsed into a list of dicts. Initial value: None
+    :ivar str query_type: Name of most recently run query, e.g., topN. Initial value: None
+    :ivar dict query_dict: JSON object representing the query. Initial value: None
+    """
+
     def __init__(self, query_dict, query_type):
+        super(Query, self).__init__()
         self.query_dict = query_dict
         self.query_type = query_type
         self.result = None
@@ -152,7 +166,22 @@ class Query(object):
             return df
 
     def __str__(self):
-        return self.result_json
+        return self.result
+
+    def __len__(self):
+        return len(self.result)
+
+    def __delitem__(self, index):
+        del self.result[index]
+
+    def insert(self, index, value):
+        self.result.insert(index, value)
+
+    def __setitem__(self, index, value):
+        self.result[index] = value
+
+    def __getitem__(self, index):
+        return self.result[index]
 
 
 class QueryBuilder(object):

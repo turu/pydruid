@@ -25,72 +25,6 @@ from pydruid.query import QueryBuilder
 
 
 class BaseDruidClient(object):
-    """
-    PyDruid contains the functions for creating and executing Druid queries, as well as
-    for exporting query results into TSV files or pandas.DataFrame objects for subsequent analysis.
-
-    :param str url: URL of Broker node in the Druid cluster
-    :param str endpoint: Endpoint that Broker listens for queries on
-
-    :ivar str result_json: JSON object representing a query result. Initial value: None
-    :ivar list result: Query result parsed into a list of dicts. Initial value: None
-    :ivar str query_type: Name of most recently run query, e.g., topN. Initial value: None
-    :ivar dict query_dict: JSON object representing the query. Initial value: None
-
-    Example
-
-    .. code-block:: python
-        :linenos:
-
-            >>> from pydruid.client import *
-
-            >>> query = PyDruid('http://localhost:8083', 'druid/v2/')
-
-            >>> top = query.topn(
-                    datasource='twitterstream',
-                    granularity='all',
-                    intervals='2013-10-04/pt1h',
-                    aggregations={"count": doublesum("count")},
-                    dimension='user_name',
-                    filter = Dimension('user_lang') == 'en',
-                    metric='count',
-                    threshold=2
-                )
-
-            >>> print json.dumps(query.query_dict, indent=2)
-            >>> {
-                  "metric": "count",
-                  "aggregations": [
-                    {
-                      "type": "doubleSum",
-                      "fieldName": "count",
-                      "name": "count"
-                    }
-                  ],
-                  "dimension": "user_name",
-                  "filter": {
-                    "type": "selector",
-                    "dimension": "user_lang",
-                    "value": "en"
-                  },
-                  "intervals": "2013-10-04/pt1h",
-                  "dataSource": "twitterstream",
-                  "granularity": "all",
-                  "threshold": 2,
-                  "queryType": "topN"
-                }
-
-            >>> print query.result
-            >>> [{'timestamp': '2013-10-04T00:00:00.000Z',
-                'result': [{'count': 7.0, 'user_name': 'user_1'}, {'count': 6.0, 'user_name': 'user_2'}]}]
-
-            >>> df = query.export_pandas()
-            >>> print df
-            >>>    count                 timestamp      user_name
-                0      7  2013-10-04T00:00:00.000Z         user_1
-                1      6  2013-10-04T00:00:00.000Z         user_2
-    """
-
     def __init__(self, url, endpoint):
         self.url = url
         self.endpoint = endpoint
@@ -134,7 +68,7 @@ class BaseDruidClient(object):
         :param int threshold: How many of the top items to return
 
         :return: The query result
-        :rtype: list[dict]
+        :rtype: Query
 
         Optional key/value pairs:
 
@@ -177,7 +111,7 @@ class BaseDruidClient(object):
         :param dict aggregations: A map from aggregator name to one of the pydruid.utils.aggregators e.g., doublesum
 
         :return: The query result
-        :rtype: list[dict]
+        :rtype: Query
 
         Optional key/value pairs:
 
@@ -218,7 +152,7 @@ class BaseDruidClient(object):
         :param list dimensions: The dimensions to group by
 
         :return: The query result
-        :rtype: list[dict]
+        :rtype: Query
 
         Optional key/value pairs:
 
@@ -277,7 +211,7 @@ class BaseDruidClient(object):
         :param dict context: A dict of query context options
 
         :return: The query result
-        :rtype: list[dict]
+        :rtype: Query
 
         Example:
 
@@ -307,7 +241,7 @@ class BaseDruidClient(object):
         :param dict context: A dict of query context options
 
         :return: The query result
-        :rtype: list[dict]
+        :rtype: Query
 
         Example:
 
@@ -341,7 +275,7 @@ class BaseDruidClient(object):
         :param dict context: A dict of query context options
 
         :return: The query result
-        :rtype: list[dict]
+        :rtype: Query
 
         Example:
 
@@ -364,7 +298,64 @@ class BaseDruidClient(object):
 
 class PyDruid(BaseDruidClient):
     """
-    Synchronous implementation of Druid client.
+    PyDruid contains the functions for creating and executing Druid queries. Returns Query objects that can be used
+    for exporting query results into TSV files or pandas.DataFrame objects for subsequent analysis.
+
+    :param str url: URL of Broker node in the Druid cluster
+    :param str endpoint: Endpoint that Broker listens for queries on
+
+    Example
+
+    .. code-block:: python
+        :linenos:
+
+            >>> from pydruid.client import *
+
+            >>> query = PyDruid('http://localhost:8083', 'druid/v2/')
+
+            >>> top = query.topn(
+                    datasource='twitterstream',
+                    granularity='all',
+                    intervals='2013-10-04/pt1h',
+                    aggregations={"count": doublesum("count")},
+                    dimension='user_name',
+                    filter = Dimension('user_lang') == 'en',
+                    metric='count',
+                    threshold=2
+                )
+
+            >>> print json.dumps(top.query_dict, indent=2)
+            >>> {
+                  "metric": "count",
+                  "aggregations": [
+                    {
+                      "type": "doubleSum",
+                      "fieldName": "count",
+                      "name": "count"
+                    }
+                  ],
+                  "dimension": "user_name",
+                  "filter": {
+                    "type": "selector",
+                    "dimension": "user_lang",
+                    "value": "en"
+                  },
+                  "intervals": "2013-10-04/pt1h",
+                  "dataSource": "twitterstream",
+                  "granularity": "all",
+                  "threshold": 2,
+                  "queryType": "topN"
+                }
+
+            >>> print top.result
+            >>> [{'timestamp': '2013-10-04T00:00:00.000Z',
+                'result': [{'count': 7.0, 'user_name': 'user_1'}, {'count': 6.0, 'user_name': 'user_2'}]}]
+
+            >>> df = top.export_pandas()
+            >>> print df
+            >>>    count                 timestamp      user_name
+                0      7  2013-10-04T00:00:00.000Z         user_1
+                1      6  2013-10-04T00:00:00.000Z         user_2
     """
     def __init__(self, url, endpoint):
         super(PyDruid, self).__init__(url, endpoint)

@@ -4,6 +4,12 @@ pydruid exposes a simple API to create, execute, and analyze [Druid](http://drui
 To install:
 ```python
 pip install pydruid
+# or, if you intend to use synchronous client
+pip install pydruid[async]
+# or, if you intend to export query results into pandas
+pip install pydruid[pandas]
+# or, if you intend to do both
+pip install pydruid[async, pandas]
 ```
 Documentation: https://pythonhosted.org/pydruid/. 
 
