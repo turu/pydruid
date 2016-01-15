@@ -299,9 +299,10 @@ class BaseDruidClient(object):
 
     def export_tsv(self, dest_path):
         """
-        (Deprecated) Use Query.export_tsv() method instead.
-
         Export the current query result to a tsv file.
+
+        .. deprecated::
+            Use Query.export_tsv() method instead.
         """
         if self.query_builder.last_query is None:
             raise AttributeError("There was no query executed by this client yet. Can't export!")
@@ -310,9 +311,10 @@ class BaseDruidClient(object):
 
     def export_pandas(self):
         """
-        (Deprecated) Use Query.export_pandas() method instead
-
         Export the current query result to a Pandas DataFrame object.
+
+        .. deprecated::
+            Use Query.export_pandas() method instead
         """
         if self.query_builder.last_query is None:
             raise AttributeError("There was no query executed by this client yet. Can't export!")
